@@ -1,0 +1,309 @@
+Build.gradle
+
+package _SmartHealth;
+
+import org.hyperledger.fabric.contract.Context;
+import org.hyperledger.fabric.contract.ContractInterface;
+import org.hyperledger.fabric.contract.annotation.Contract;
+import org.hyperledger.fabric.contract.annotation.Default;
+import org.hyperledger.fabric.contract.annotation.Info;
+import org.hyperledger.fabric.contract.annotation.Transaction;
+import org.hyperledger.fabric.shim.ChaincodeException;
+import org.hyperledger.fabric.shim.ChaincodeStub;
+import com.owlike.genson.Genson;
+
+@Contract(
+name = "SmartHealth",
+info = @Info(
+title = "PatientHealth Contract",
+description = "A chaincode for patient health management",
+version = "0.0.1-SNAPSHOT"))
+
+@Default
+public final class PatientHealth implements ContractInterface {
+private final Genson genson = new Genson();
+private enum PatientHealthErrors {
+PATIENT_NOT_FOUND,
+PATIENT_ALREADY_EXISTS
+}
+
+@Transaction()
+public void initLedger(final Context ctx) {
+ChaincodeStub stub = ctx.getStub();
+Patient patient = new Patient("1", "Alice", "27 Feb 2025", "Fever", "Medicine Injected", "Being Monitored" );
+String patientState = genson.serialize(patient);
+stub.putStringState("1", patientState);
+}
+
+@Transaction()
+public Patient addPatient(final Context ctx, final String id, final String name, final String visitDate, final String diagnosis,
+final String treatment, final String status) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+
+if (!patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s already exists", id);
+
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_ALREADY_EXISTS.toString());
+}
+
+Patient patient = new Patient(id, name, visitDate, diagnosis, treatment, status);
+patientState = genson.serialize(patient);
+stub.putStringState(id, patientState);
+return patient;
+}
+
+@Transaction()
+public Patient queryPatientById(final Context ctx, final String id) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+if (patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s does not exist", id);
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_NOT_FOUND.toString());
+}
+
+Patient patient = genson.deserialize(patientState, Patient.class);
+return patient;
+}
+
+@Transaction()
+public Patient updatePatientTreatment(final Context ctx, final String id, final String newTreatment) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+if (patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s does not exist", id);
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_NOT_FOUND.toString());
+}
+
+Patient patient = genson.deserialize(patientState, Patient.class);
+Patient updatedPatient = new Patient(patient.getId(), patient.getName(), patient.getVisitDate(), patient.getDiagnosis(), patient.getTreatment(), newTreatment);
+String newPatientState = genson.serialize(updatedPatient);
+stub.putStringState(id, newPatientState);
+return updatedPatient;
+}
+
+@Transaction()
+public Patient latestPatientStatus(final Context ctx, final String id, final String newStatus) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+if (patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s does not exist", id);
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_NOT_FOUND.toString());
+}
+
+Patient patient = genson.deserialize(patientState, Patient.class);
+Patient updatedPatient = new Patient(patient.getId(), patient.getName(), patient.getVisitDate(), patient.getDiagnosis(), patient.getTreatment(), newStatus );
+String newPatientState = genson.serialize(updatedPatient);
+stub.putStringState(id, newPatientState);
+
+return updatedPatient;
+}
+}
+
+—-----------------------------------------------------
+Patient.java
+
+package _SmartHealth;
+
+import com.owlike.genson.annotation.JsonProperty;
+import org.hyperledger.fabric.contract.annotation.DataType;
+import org.hyperledger.fabric.contract.annotation.Property;
+import java.util.Objects;
+
+@DataType()
+public final class Patient {
+
+@Property()
+private final String id;
+
+@Property()
+private final String name;
+
+@Property()
+private final String visitDate;
+
+@Property()
+private final String diagnosis;
+
+@Property()
+private final String treatment;
+
+@Property()
+private final String status;
+
+
+public String getId() {
+return id;
+}
+
+public String getName() {
+return name;
+}
+
+public String getVisitDate() {
+return visitDate;
+}
+
+public String getDiagnosis() {
+return diagnosis;
+}
+
+public String getTreatment() {
+return treatment;
+}
+
+public String getStatus() {
+return status;
+}
+
+
+
+public Patient(@JsonProperty("id") final String id, @JsonProperty("name") final String name, @JsonProperty("visitDate") final String visitDate,
+@JsonProperty("diagnosis") final String diagnosis, @JsonProperty("treatment") final String treatment, @JsonProperty("status") final String status) {
+this.id = id;
+this.name = name;
+this.visitDate = visitDate;
+this.diagnosis = diagnosis;
+this.treatment = treatment;
+this.status = status;
+}
+
+@Override
+public boolean equals(final Object obj) {
+if (this == obj) {
+return true;
+}
+
+if ((obj == null) || (getClass() != obj.getClass())) {
+return false;
+}
+
+Patient other = (Patient) obj;
+return Objects.deepEquals(new String[] { getId(), getName(), getVisitDate(), getDiagnosis(), getTreatment(), getStatus() },
+new String[] { other.getId(), other.getName(), other.getVisitDate(), other.getDiagnosis(), other.getTreatment(), other.getStatus()});
+}
+
+@Override
+public int hashCode() {
+return Objects.hash(getId(), getName(), getVisitDate(), getDiagnosis(), getTreatment(), getStatus());
+}
+
+@Override
+public String toString() {
+return this.getClass().getSimpleName() + "@" + Integer.toHexString(hashCode()) + " [id=" + id + ", name =" + name
++ ", visitDate =" + visitDate + ", diagnosis =" + diagnosis + ", treatment =" + treatment + ", status =" + status + " ]";
+}
+}
+
+—-------------------------------------------------
+PatientHealth.java
+
+package _SmartHealth;
+
+import org.hyperledger.fabric.contract.Context;
+import org.hyperledger.fabric.contract.ContractInterface;
+import org.hyperledger.fabric.contract.annotation.Contract;
+import org.hyperledger.fabric.contract.annotation.Default;
+import org.hyperledger.fabric.contract.annotation.Info;
+import org.hyperledger.fabric.contract.annotation.Transaction;
+import org.hyperledger.fabric.shim.ChaincodeException;
+import org.hyperledger.fabric.shim.ChaincodeStub;
+import com.owlike.genson.Genson;
+
+@Contract(
+name = "SmartHealth",
+info = @Info(
+title = "PatientHealth Contract",
+description = "A chaincode for patient health management",
+version = "0.0.1-SNAPSHOT"))
+
+@Default
+public final class PatientHealth implements ContractInterface {
+private final Genson genson = new Genson();
+private enum PatientHealthErrors {
+PATIENT_NOT_FOUND,
+PATIENT_ALREADY_EXISTS
+}
+
+@Transaction()
+public void initLedger(final Context ctx) {
+ChaincodeStub stub = ctx.getStub();
+Patient patient = new Patient("1", "Alice", "27 Feb 2025", "Fever", "Medicine Injected", "Being Monitored" );
+String patientState = genson.serialize(patient);
+stub.putStringState("1", patientState);
+}
+
+@Transaction()
+public Patient addPatient(final Context ctx, final String id, final String name, final String visitDate, final String diagnosis,
+final String treatment, final String status) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+
+if (!patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s already exists", id);
+
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_ALREADY_EXISTS.toString());
+}
+
+Patient patient = new Patient(id, name, visitDate, diagnosis, treatment, status);
+patientState = genson.serialize(patient);
+stub.putStringState(id, patientState);
+return patient;
+}
+
+@Transaction()
+public Patient queryPatientById(final Context ctx, final String id) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+if (patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s does not exist", id);
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_NOT_FOUND.toString());
+}
+
+Patient patient = genson.deserialize(patientState, Patient.class);
+return patient;
+}
+
+@Transaction()
+public Patient updatePatientTreatment(final Context ctx, final String id, final String newTreatment) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+if (patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s does not exist", id);
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_NOT_FOUND.toString());
+}
+
+Patient patient = genson.deserialize(patientState, Patient.class);
+Patient updatedPatient = new Patient(patient.getId(), patient.getName(), patient.getVisitDate(), patient.getDiagnosis(), patient.getTreatment(), newTreatment);
+String newPatientState = genson.serialize(updatedPatient);
+stub.putStringState(id, newPatientState);
+return updatedPatient;
+}
+
+@Transaction()
+public Patient latestPatientStatus(final Context ctx, final String id, final String newStatus) {
+ChaincodeStub stub = ctx.getStub();
+String patientState = stub.getStringState(id);
+if (patientState.isEmpty()) {
+String errorMessage = String.format("Patient %s does not exist", id);
+System.out.println(errorMessage);
+throw new ChaincodeException(errorMessage, PatientHealthErrors.PATIENT_NOT_FOUND.toString());
+}
+
+Patient patient = genson.deserialize(patientState, Patient.class);
+Patient updatedPatient = new Patient(patient.getId(), patient.getName(), patient.getVisitDate(), patient.getDiagnosis(), patient.getTreatment(), newStatus );
+String newPatientState = genson.serialize(updatedPatient);
+stub.putStringState(id, newPatientState);
+
+return updatedPatient;
+}
+}
+
+—-----------------------------------------------
