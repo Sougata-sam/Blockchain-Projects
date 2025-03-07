@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.10;
+
+contract IPsystem {
+
+    struct IntellectualProperty {
+       uint256 id;
+       string iptype;
+       string ipdescription;
+       string ipholders;
+       string iprights;
+    }
+   
+   mapping(uint256 => IntellectualProperty) public Iproperties;
+
+    function addIntellectualProperty(uint256 _id, string memory _iptype, string memory _ipdescription, string memory _ipholders, string memory _iprights) public onlyOwner {
+  
+        Iproperties[_id].iptype = _iptype;
+        Iproperties[_id].ipdescription = _ipdescription;
+        Iproperties[_id].ipholders = _ipholders;
+        Iproperties[_id].iprights = _iprights;
+     
+    }
+   
+         address public ipOffice;
+        constructor() public {
+        ipOffice = msg.sender;
+    }
+    modifier onlyOwner() {
+        require(msg.sender == ipOffice);
+        _;
+    }
+   
+ function queryIPropertyById(uint256 _id)
+        public view returns (
+            string memory iptitle,
+            string memory ipdescription,
+            string memory ipholder,
+            string memory iprights
+        )
+    {
+        return (
+            Iproperties[_id].iptype,
+            Iproperties[_id].ipdescription,
+            Iproperties[_id].ipholders,
+            Iproperties[_id].iprights
+        
+        );
+    }
+    function transferIPropertyOwnership(
+        uint256 _id,
+        string memory _newHolders) public onlyOwner {
+        Iproperties[_id].ipholders = _newHolders;
+    }
+   function updateIPropertyRights(
+        uint256 _id,
+        string memory _updateRights) public onlyOwner {
+        Iproperties[_id].iprights = _updateRights;
+    }
+
+}
+
