@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+contract DrugSupplyChain {
+    
+    struct Drug {
+        uint256 id;
+        string name;
+        string description;
+        string composition;
+        string manufacturer;
+        string registrationNumber;
+        string brandName;
+    }
+
+    struct Batch {
+        uint256 batchNumber;
+        uint256 manufacturingDate;
+        uint256 expiryDate;
+        string barcode;
+        uint256 stock;
+    }
+
+    struct Stock {
+        uint256 manufacturer;
+        uint256 cAndFAgent;
+        uint256 stockists;
+        uint256 wholesalers;
+        uint256 retailers;
+    }
+
+    mapping(uint256 => Drug) public drugs;
+    mapping(uint256 => Batch) public batches;
+    mapping(uint256 => Stock) public stocks;
+    mapping(uint256 => bool) public batchExists;
+
+    address public owner;
+    mapping(address => string) public userRoles;  // Role-based access control
+
+    event DrugRegistered(uint256 drugId, string name, string manufacturer);
+    event BatchAdded(uint256 drugId, uint256 batchNumber, uint256 stock);
+    event StockTransferred(uint256 batchNumber, string from, string to, uint256 quantity);
+    event UserRoleAssigned(address user, string role);
+
+    modifier onlyRole(string memory role) {
+        require(keccak256(abi.encodePacked(userRoles[msg.sender])) == keccak256(abi.encodePacked(role)), "Unauthorized");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+        userRoles[msg.sender] = "Admin"; // Contract deployer is Admin
+    }
+
+    function assignUserRole(address _user, string memory _role) public {
+        require(msg.sender == owner, "Only owner can assign roles");
+        userRoles[_user] = _role;
+        emit UserRoleAssigned(_user, _role);
+    }
+
+    function registerDrug(
+        uint256 _id, 
+        string memory _name, 
+        string memory _description, 
+        string memory _composition, 
+        string memory _manufacturer, 
+        string memory _registrationNumber, 
+        string memory _brandName
+    ) public onlyRole("Manufacturer") {
+        drugs[_id] = Drug(_id, _name, _description, _composition, _manufacturer, _registrationNumber, _brandName);
+        emit DrugRegistered(_id, _name, _manufacturer);
+    }
+
+    function addBatch(
+        uint256 _drugId, 
+        uint256 _batchNumber, 
+        uint256 _manufacturingDate, 
+        uint256 _expiryDate, 
+        string memory _barcode, 
+        uint256 _stock
+    ) public onlyRole("Manufacturer") {
+        require(!batchExists[_batchNumber], "Batch already exists");
+
+        batches[_batchNumber] = Batch(_batchNumber, _manufacturingDate, _expiryDate, _barcode, _stock);
+        stocks[_batchNumber] = Stock(_stock, 0, 0, 0, 0);
+        batchExists[_batchNumber] = true;
+
+        emit BatchAdded(_drugId, _batchNumber, _stock);
+    }
+
+    function transferStock(uint256 _batchNumber, string memory _from, string memory _to, uint256 _quantity) public {
+        require(batchExists[_batchNumber], "Batch does not exist");
+
+        Stock storage stock = stocks[_batchNumber];
+
+        if (keccak256(abi.encodePacked(_from)) == keccak256(abi.encodePacked("Manufacturer"))) {
+            require(stock.manufacturer >= _quantity, "Not enough stock at Manufacturer");
+            stock.manufacturer -= _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_from)) == keccak256(abi.encodePacked("C&F Agent"))) {
+            require(stock.cAndFAgent >= _quantity, "Not enough stock at C&F Agent");
+            stock.cAndFAgent -= _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_from)) == keccak256(abi.encodePacked("Stockists"))) {
+            require(stock.stockists >= _quantity, "Not enough stock at Stockists");
+            stock.stockists -= _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_from)) == keccak256(abi.encodePacked("Wholesalers"))) {
+            require(stock.wholesalers >= _quantity, "Not enough stock at Wholesalers");
+            stock.wholesalers -= _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_from)) == keccak256(abi.encodePacked("Retailers"))) {
+            require(stock.retailers >= _quantity, "Not enough stock at Retailers");
+            stock.retailers -= _quantity;
+        } 
+        else {
+            revert("Invalid 'from' entity");
+        }
+
+        if (keccak256(abi.encodePacked(_to)) == keccak256(abi.encodePacked("C&F Agent"))) {
+            stock.cAndFAgent += _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_to)) == keccak256(abi.encodePacked("Stockists"))) {
+            stock.stockists += _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_to)) == keccak256(abi.encodePacked("Wholesalers"))) {
+            stock.wholesalers += _quantity;
+        } 
+        else if (keccak256(abi.encodePacked(_to)) == keccak256(abi.encodePacked("Retailers"))) {
+            stock.retailers += _quantity;
+        } 
+        else {
+            revert("Invalid 'to' entity");
+        }
+
+        emit StockTransferred(_batchNumber, _from, _to, _quantity);
+    }
+
+    function getDrugDetails(uint256 _drugId) public view returns (Drug memory) {
+        return drugs[_drugId];
+    }
+
+    function getBatchDetails(uint256 _batchNumber) public view returns (Batch memory) {
+        return batches[_batchNumber];
+    }
+
+    function getStockDetails(uint256 _batchNumber) public view returns (uint256, uint256, uint256, uint256, uint256) {
+        require(batchExists[_batchNumber], "Batch does not exist");
+        Stock storage stock = stocks[_batchNumber];
+        return (stock.manufacturer, stock.cAndFAgent, stock.stockists, stock.wholesalers, stock.retailers);
+    }
+}
+---------------------------------------------
